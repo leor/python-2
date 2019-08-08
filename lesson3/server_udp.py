@@ -50,7 +50,7 @@ if __name__ == '__main__':
 
             sock.sendto(json.dumps({
                 'status': 200,
-                'alert': f'You typed: {client_data["user"]["status"]}!'
+                'alert': f'{client_data["user"]["account"]} typed: {client_data["user"]["status"]}!'
             }).encode(), client)
 
     except KeyboardInterrupt:

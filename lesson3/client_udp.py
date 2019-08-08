@@ -44,9 +44,9 @@ if __name__ == '__main__':
 
             print('Sending data...')
             sock.sendto(json.dumps({
-                'action': 'presence',
+                'action': 'message',
                 'time': int(time.time()),
-                'type': 'status',
+                'type': 'message',
                 'user': {
                     'account': username,
                     'status': message
