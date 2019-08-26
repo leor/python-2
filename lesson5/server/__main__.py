@@ -1,5 +1,7 @@
 import json
 import socket
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 from argparse import ArgumentParser
 from protocol import validate_request, make_response
@@ -33,19 +35,29 @@ if args.port:
     config['port'] = args.port
 
 
+logging.basicConfig(
+    level = logging.DEBUG,
+    handlers=(
+        TimedRotatingFileHandler(f'logs/server.log', when='D'),
+        logging.StreamHandler()
+    ),
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+
 if __name__ == '__main__':
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((config['host'], config['port']))
         sock.listen(5)
 
-        print(f'Server started on {config["host"]}:{config["port"]} (press Ctrl+C to stop)...')
+        logging.info(f'Server started on {config["host"]}:{config["port"]} (press Ctrl+C to stop)...')
 
         while True:
             client, address = sock.accept()
             client_host, client_port = address
 
-            print(f'Client connected at {client_host}:{client_port}')
+            logging.info(f'Client connected at {client_host}:{client_port}')
 
             client_bytes = client.recv(config['buffersize'])
             request = json.loads(client_bytes.decode())
@@ -57,20 +69,20 @@ if __name__ == '__main__':
                 if controller:
                     try:
                         response = controller(request)
-                        print(f'Sending server response {response}')
+                        logging.info(f'Sending server response {response}')
                     except Exception as err:
                         response = make_response(request, 500, 'Internal server error')
-                        print(f'Exception - {err}')    
+                        logging.critical(f'Exception - {err}')    
                 else:
                     response = make_response(request, 404, f'Action {action} not found')
-                    print(f'Client {client_host}:{client_port} call unknown action {action}')
+                    logging.error(f'Client {client_host}:{client_port} call unknown action {action}')
             else:
                 response = make_response(request, 400, 'Wrong request')
-                print(f'Client {client_host}:{client_port} sent wrong request {request}')
+                logging.error(f'Client {client_host}:{client_port} sent wrong request {request}')
 
             client.send(json.dumps(response).encode())
 
             client.close()
     except KeyboardInterrupt:
         client.close()
-        print('Server shutdown')
+        logging.info('Server shutdown')
