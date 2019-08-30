@@ -1,13 +1,10 @@
-import json
 import socket
 import logging
 from logging.handlers import TimedRotatingFileHandler
+from select import select
 
 from argparse import ArgumentParser
-from protocol import validate_request, make_response
-from settings import INSTALLED_APPS
-from resolver import resolve
-
+from handlers import handle_tcp_request
 
 config = {
     'host': '127.0.0.1',
@@ -44,45 +41,45 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+connections = []
+requests = []
 
 if __name__ == '__main__':
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((config['host'], config['port']))
+        sock.setblocking(False)
+        sock.settimeout(0)
         sock.listen(5)
 
         logging.info(f'Server started on {config["host"]}:{config["port"]} (press Ctrl+C to stop)...')
 
         while True:
-            client, address = sock.accept()
-            client_host, client_port = address
+            try:
+                client, address = sock.accept()
+                client_host, client_port = address
 
-            logging.info(f'Client connected at {client_host}:{client_port}')
+                logging.info(f'Client connected at {client_host}:{client_port}')
 
-            client_bytes = client.recv(config['buffersize'])
-            request = json.loads(client_bytes.decode())
+                connections.append(client)
+            except:
+                pass
 
-            if(validate_request(request)):
-                action = request.get('action')
-                controller = resolve(action, INSTALLED_APPS)
 
-                if controller:
-                    try:
-                        response = controller(request)
-                        logging.info(f'Sending server response {response}')
-                    except Exception as err:
-                        response = make_response(request, 500, 'Internal server error')
-                        logging.critical(f'Exception - {err}')    
-                else:
-                    response = make_response(request, 404, f'Action {action} not found')
-                    logging.error(f'Client {client_host}:{client_port} call unknown action {action}')
-            else:
-                response = make_response(request, 400, 'Wrong request')
-                logging.error(f'Client {client_host}:{client_port} sent wrong request {request}')
+            rlist, wlist, xlist = select(connections, connections, connections, 0)
 
-            client.send(json.dumps(response).encode())
+            for r_client in rlist:
+                requests.append(r_client.recv(config['buffersize']))
 
-            client.close()
+            if requests:
+                client_bytes = requests.pop()
+                response = handle_tcp_request(client_bytes)
+
+                for w_client in wlist:
+                    w_client.send(response)
     except KeyboardInterrupt:
-        client.close()
+        if connections:
+            for client in connections:
+                sock.close(client)
+
         logging.info('Server shutdown')
