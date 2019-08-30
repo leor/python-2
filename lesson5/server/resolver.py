@@ -1,6 +1,8 @@
 from functools import reduce
+from decorators import log
 
 
+@log('%(name)s%(args)s - %(result)s')
 def get_server_actions(installed):
     apps = list(map(
         lambda item: __import__(f'{item}.routes'),
@@ -18,6 +20,7 @@ def get_server_actions(installed):
         []
     )
 
+@log('%(name)s%(args)s - %(result)s')
 def resolve(action, installed):
     sa = get_server_actions(installed)
     print(sa)
