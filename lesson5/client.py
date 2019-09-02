@@ -2,13 +2,20 @@ import socket
 import json
 from datetime import datetime
 from argparse import ArgumentParser
+import hashlib
+import zlib
 
 
-def make_request(action, data):
+READ_MODE = 'r'
+WRITE_MODE = 'w'
+
+
+def make_request(action, data, token=None):
     return {
         'action': action,
         'data': data,
-        'time': datetime.now().timestamp()
+        'time': datetime.now().timestamp(),
+        'token': token
     }
 
 
@@ -28,6 +35,10 @@ arg_parser.add_argument(
     '-p', '--port', type=int, required=False,
     help=f'Sets server port ({config["port"]} by default)'
 )
+arg_parser.add_argument(
+    '-m', '--mode', type=str, default=READ_MODE,
+    help=f'Sets client mode ("read" by default)'
+)
 
 args = arg_parser.parse_args()
 
@@ -45,20 +56,25 @@ if __name__ == '__main__':
 
         print(f'Client started (press Ctrl+C to stop)...')
 
-        action = input('Enter server action: ')
-        data = input('Enter data to pass to server: ')
-        
-        print('Sending data...')
-        sock.send(json.dumps(make_request(
-            action, data
-        )).encode())
+        while True:
+            if args.mode == WRITE_MODE:
+                action = input('Enter server action: ')
+                data = input('Enter data to pass to server: ')
+                
+                hash_object = hashlib.sha256()
+                hash_object.update(
+                    str(datetime.now().timestamp()).encode()
+                )
 
-        print('Recieving data...')
-        bytes_response = sock.recv(config.get('buffersize'))
-        print(f'Server message: {json.loads(bytes_response.decode())}')
+                print('Sending data...')
+                sock.send(zlib.compress(json.dumps(make_request(
+                    action, data, hash_object.hexdigest()
+                )).encode()))
 
-        sock.close()
-        
+            else:
+                print('Recieving data...')
+                bytes_response = sock.recv(config.get('buffersize'))
+                print(f'Server message: {json.loads(zlib.decompress(bytes_response).decode())}')
     except KeyboardInterrupt:
         sock.close()
         print('Client shutdown')
