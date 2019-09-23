@@ -2,9 +2,12 @@ import socket
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from select import select
-
 from argparse import ArgumentParser
+from threading import Thread
+
 from handlers import handle_tcp_request
+from sock_io import read, write
+
 
 config = {
     'host': '127.0.0.1',
@@ -65,18 +68,20 @@ if __name__ == '__main__':
             except:
                 pass
 
+            if connections:
+                rlist, wlist, xlist = select(connections, connections, connections, 0)
 
-            rlist, wlist, xlist = select(connections, connections, connections, 0)
+                for r_client in rlist:
+                    r_thread = Thread(target=read, args=(r_client, connections, requests, config['buffersize']), daemon=True)
+                    r_thread.start()
+                    
+                if requests:
+                    client_bytes = requests.pop()
+                    response = handle_tcp_request(client_bytes)
 
-            for r_client in rlist:
-                requests.append(r_client.recv(config['buffersize']))
-
-            if requests:
-                client_bytes = requests.pop()
-                response = handle_tcp_request(client_bytes)
-
-                for w_client in wlist:
-                    w_client.send(response)
+                    for w_client in wlist:
+                        w_thread = Thread(target=write, args=(w_client, connections, response), daemon=True)
+                        w_thread.start()
     except KeyboardInterrupt:
         if connections:
             for client in connections:

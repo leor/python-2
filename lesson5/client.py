@@ -4,10 +4,15 @@ from datetime import datetime
 from argparse import ArgumentParser
 import hashlib
 import zlib
+import threading
 
 
-READ_MODE = 'r'
-WRITE_MODE = 'w'
+lock = threading.Lock()
+
+def read(sock, buffersize):
+    while True:
+        bytes_response = sock.recv(buffersize)
+        print(f'Server message: {json.loads(zlib.decompress(bytes_response).decode())}')
 
 
 def make_request(action, data, token=None):
@@ -35,10 +40,6 @@ arg_parser.add_argument(
     '-p', '--port', type=int, required=False,
     help=f'Sets server port ({config["port"]} by default)'
 )
-arg_parser.add_argument(
-    '-m', '--mode', type=str, default=READ_MODE,
-    help=f'Sets client mode ("read" by default)'
-)
 
 args = arg_parser.parse_args()
 
@@ -56,25 +57,22 @@ if __name__ == '__main__':
 
         print(f'Client started (press Ctrl+C to stop)...')
 
+        r_thread = threading.Thread(target=read, args=(sock, config.get('buffersize')))
+        r_thread.start()
+
         while True:
-            if args.mode == WRITE_MODE:
-                action = input('Enter server action: ')
-                data = input('Enter data to pass to server: ')
-                
-                hash_object = hashlib.sha256()
-                hash_object.update(
-                    str(datetime.now().timestamp()).encode()
-                )
+            action = input('Enter server action: ')
+            data = input('Enter data to pass to server: ')
+            
+            hash_object = hashlib.sha256()
+            hash_object.update(
+                str(datetime.now().timestamp()).encode()
+            )
 
-                print('Sending data...')
-                sock.send(zlib.compress(json.dumps(make_request(
-                    action, data, hash_object.hexdigest()
-                )).encode()))
-
-            else:
-                print('Recieving data...')
-                bytes_response = sock.recv(config.get('buffersize'))
-                print(f'Server message: {json.loads(zlib.decompress(bytes_response).decode())}')
+            print('Sending data...')
+            sock.send(zlib.compress(json.dumps(make_request(
+                action, data, hash_object.hexdigest()
+            )).encode()))
     except KeyboardInterrupt:
         sock.close()
         print('Client shutdown')
